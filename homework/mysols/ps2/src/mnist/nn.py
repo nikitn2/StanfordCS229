@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+import pickle
+import os.path
 
 def softmax(x):
     """
@@ -21,6 +23,10 @@ def softmax(x):
         A 2d numpy float array containing the softmax results of shape batch_size x number_of_classes
     """
     # *** START CODE HERE ***
+    # Use that softmax(x - c) = softmax(x)
+    z = x - x.max()
+    ez = np.exp(z)
+    return ez/ez.sum(1)[:,np.newaxis]
     # *** END CODE HERE ***
 
 def sigmoid(x):
@@ -34,6 +40,7 @@ def sigmoid(x):
         A numpy float array containing the sigmoid results
     """
     # *** START CODE HERE ***
+    return 1/(1+np.exp(-x))
     # *** END CODE HERE ***
 
 def get_initial_params(input_size, num_hidden, num_output):
@@ -63,6 +70,11 @@ def get_initial_params(input_size, num_hidden, num_output):
     """
 
     # *** START CODE HERE ***
+    W1 = np.random.normal(loc=0,scale=1, size=(input_size,num_hidden))
+    b1 = np.zeros(num_hidden)
+    W2 = np.random.normal(loc=0,scale=1, size=(num_hidden, num_output))
+    b2 = np.zeros(num_output)
+    return {"W1": W1, "b1":b1, "W2": W2, "b2":b2}
     # *** END CODE HERE ***
 
 def forward_prop(data, labels, params):
@@ -84,8 +96,15 @@ def forward_prop(data, labels, params):
             3. The average loss for these data elements
     """
     # *** START CODE HERE ***
+    a    = sigmoid( data @ params["W1"] + params["b1"][np.newaxis, :] )
+    z    = a @ params["W2"] + params["b2"][np.newaxis, :]
+    pred = softmax(z)
+    #
+    loss = -np.mean( (labels*np.log(pred)).sum(1)  )
+    #
+    return (a,pred, loss)
     # *** END CODE HERE ***
-
+    
 def backward_prop(data, labels, params, forward_prop_func):
     """
     Implement the backward propegation gradient computation step for a neural network
@@ -107,8 +126,18 @@ def backward_prop(data, labels, params, forward_prop_func):
             W1, W2, b1, and b2
     """
     # *** START CODE HERE ***
+    (a,pred,_) = forward_prop_func(data,labels,params)
+    W2T = params["W2"].transpose()
+    #
+    grad_z = pred-labels
+    grad_b2 = np.mean(grad_z                                         , axis=0)
+    grad_W2 = np.mean(grad_z[:,np.newaxis,:] * a[:,:, np.newaxis]    , axis=0)
+    grad_bi1=(grad_z @ W2T) * a*(1-a)
+    grad_b1 = np.mean(grad_bi1                                       , axis=0)
+    grad_W1 = np.mean(data[:,:,np.newaxis] * grad_bi1[:,np.newaxis,:], axis=0)     
+    return {"W1": grad_W1, "b1": grad_b1, "W2": grad_W2, "b2": grad_b2 }                 
     # *** END CODE HERE ***
-
+    
 
 def backward_prop_regularized(data, labels, params, forward_prop_func, reg):
     """
@@ -132,6 +161,16 @@ def backward_prop_regularized(data, labels, params, forward_prop_func, reg):
             W1, W2, b1, and b2
     """
     # *** START CODE HERE ***
+    (a,pred,_) = forward_prop_func(data,labels,params)
+    W2T = params["W2"].transpose()
+    #
+    grad_z = pred-labels
+    grad_b2 = np.mean(grad_z                                         , axis=0)
+    grad_W2 = np.mean(grad_z[:,np.newaxis,:] * a[:,:, np.newaxis]    , axis=0) + reg*2*params["W2"]
+    grad_bi1=(grad_z @ W2T) * a*(1-a)
+    grad_b1 = np.mean(grad_bi1                                       , axis=0)
+    grad_W1 = np.mean(data[:,:,np.newaxis] * grad_bi1[:,np.newaxis,:], axis=0) + reg*2*params["W1"]
+    return {"W1": grad_W1, "b1": grad_b1, "W2": grad_W2, "b2": grad_b2 }
     # *** END CODE HERE ***
 
 def gradient_descent_epoch(train_data, train_labels, learning_rate, batch_size, params, forward_prop_func, backward_prop_func):
@@ -154,6 +193,14 @@ def gradient_descent_epoch(train_data, train_labels, learning_rate, batch_size, 
     """
 
     # *** START CODE HERE ***
+    n= train_data.shape[0]
+    batch_num = n//batch_size
+    for batch in range(0,batch_num):
+        batchStart = batch*batch_size
+        if batch < batch_num-1: batchEnd = batchStart+batch_size
+        else: batchEnd = -1
+        paramsGrad = backward_prop_func(train_data[batchStart:batchEnd], train_labels[batchStart:batchEnd], params, forward_prop_func)
+        for param in params: params[param] -= learning_rate*paramsGrad[param]
     # *** END CODE HERE ***
 
     # This function does not return anything
@@ -167,12 +214,13 @@ def nn_train(
     (nexp, dim) = train_data.shape
 
     params = get_initial_params_func(dim, num_hidden, 10)
-
+    
     cost_train = []
     cost_dev = []
     accuracy_train = []
     accuracy_dev = []
     for epoch in range(num_epochs):
+        print("Epoch #{} training.".format(epoch))
         gradient_descent_epoch(train_data, train_labels, 
             learning_rate, batch_size, params, forward_prop_func, backward_prop_func)
 
@@ -206,12 +254,21 @@ def read_data(images_file, labels_file):
     return x, y
 
 def run_train_test(name, all_data, all_labels, backward_prop_func, num_epochs, plot=True):
-    params, cost_train, cost_dev, accuracy_train, accuracy_dev = nn_train(
-        all_data['train'], all_labels['train'], 
-        all_data['dev'], all_labels['dev'],
-        get_initial_params, forward_prop, backward_prop_func,
-        num_hidden=300, learning_rate=5, num_epochs=num_epochs, batch_size=1000
-    )
+    
+    if os.path.isfile('{}.pickle'.format(name)):
+        with open('{}.pickle'.format(name), 'rb') as handle:
+            params         = pickle.load(handle)
+            cost_train     = pickle.load(handle)
+            cost_dev       = pickle.load(handle)
+            accuracy_train = pickle.load(handle)
+            accuracy_dev   = pickle.load(handle)
+    else:
+        params, cost_train, cost_dev, accuracy_train, accuracy_dev = nn_train(
+            all_data['train'], all_labels['train'], 
+            all_data['dev'], all_labels['dev'],
+            get_initial_params, forward_prop, backward_prop_func,
+            num_hidden=300, learning_rate=5, num_epochs=num_epochs, batch_size=1000
+            )
 
     t = np.arange(num_epochs)
 
@@ -238,7 +295,12 @@ def run_train_test(name, all_data, all_labels, backward_prop_func, num_epochs, p
 
     accuracy = nn_test(all_data['test'], all_labels['test'], params)
     print('For model %s, got accuracy: %f' % (name, accuracy))
-    
+    with open('{}.pickle'.format(name), 'wb') as handle:
+        pickle.dump(params, handle)
+        pickle.dump(cost_train, handle)
+        pickle.dump(cost_dev, handle)
+        pickle.dump(accuracy_train, handle)
+        pickle.dump(accuracy_dev, handle)
     return accuracy
 
 def main(plot=True):
@@ -282,7 +344,7 @@ def main(plot=True):
     
     baseline_acc = run_train_test('baseline', all_data, all_labels, backward_prop, args.num_epochs, plot)
     reg_acc = run_train_test('regularized', all_data, all_labels, 
-        lambda a, b, c, d: backward_prop_regularized(a, b, c, d, reg=0.0001),
+        lambda a, b, c, d: backward_prop_regularized(a, b, c, d, reg=0.0001),# XXX <--- lambda a,b,c,d ??? Learn what this means. XXX
         args.num_epochs, plot)
         
     return baseline_acc, reg_acc

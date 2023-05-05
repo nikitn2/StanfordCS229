@@ -1,5 +1,4 @@
 import collections
-
 import numpy as np
 
 import util
@@ -21,6 +20,8 @@ def get_words(message):
     """
 
     # *** START CODE HERE ***
+    return message.lower().split()
+    
     # *** END CODE HERE ***
 
 
@@ -41,6 +42,23 @@ def create_dictionary(messages):
     """
 
     # *** START CODE HERE ***
+    wordOccurances = {}
+    for message in messages:
+        for word in get_words(message):
+            if word not in wordOccurances: wordOccurances[word] = 1
+            else: wordOccurances[word] +=1
+    
+    wordsToKeep = []
+    for word, numOfOccurances in wordOccurances.items():
+        if numOfOccurances>=5: wordsToKeep += [word]
+    wordsToKeep.sort()
+    
+    wordToIndices = {}; indx = 0
+    for word in wordsToKeep:
+        wordToIndices[word] = indx
+        indx+=1
+    
+    return wordToIndices
     # *** END CODE HERE ***
 
 
@@ -65,6 +83,14 @@ def transform_text(messages, word_dictionary):
         j-th vocabulary word in the i-th message.
     """
     # *** START CODE HERE ***
+    transformedText = np.zeros((len(messages),len(word_dictionary) ))
+    
+    for messageNum, message in enumerate(messages):
+        for word in get_words(message):
+            if word in word_dictionary: transformedText[messageNum, word_dictionary[word]] += 1
+    
+    return transformedText
+    
     # *** END CODE HERE ***
 
 
@@ -85,6 +111,28 @@ def fit_naive_bayes_model(matrix, labels):
     """
 
     # *** START CODE HERE ***
+    numMessages= matrix.shape[0]
+    vocabSize  = matrix.shape[1] # <-- number of features
+    
+    # Train the model parameters w/ Laplace-smoothing
+    
+    # First calc the probability for word k to occur given spammy email
+    numerator = 1+np.sum( matrix * labels[:,np.newaxis],axis=0)
+    denomintr = vocabSize + np.sum( matrix * labels[:,np.newaxis] )
+    p_jGivenSpam = numerator/denomintr
+    
+    # Now get the probability for this word j to come given the email is non-spammy
+    numerator = 1+np.sum(matrix * (1-labels)[:,np.newaxis],axis=0)
+    denomintr = vocabSize + np.sum( matrix * (1-labels)[:,np.newaxis] )
+    p_jGivenNotspam = numerator/denomintr
+    
+    # And get the probability for an email to be spam
+    numerator = 1 + np.sum(labels)
+    denomintr = 2 + numMessages
+    p_spam = numerator/denomintr
+    
+    model = {"pj_spam" : p_jGivenSpam, "pj_notspam" : p_jGivenNotspam, "pspam" : p_spam}
+    return model
     # *** END CODE HERE ***
 
 
@@ -101,6 +149,21 @@ def predict_from_naive_bayes_model(model, matrix):
     Returns: A numpy array containg the predictions from the model
     """
     # *** START CODE HERE ***
+    
+    # The numerator is straightforward
+    logA = np.log(matrix * model["pj_spam"][np.newaxis,:])
+    logA[logA == -np.inf] = 0
+    logNumerator = np.sum( logA, axis = 1)
+    
+    # Denominator will take a bit of work.
+    logB = np.log(matrix * model["pj_notspam"][np.newaxis,:])
+    logB[logB == -np.inf] = 0
+    logC = np.log( (1-model["pspam"])/model["pspam"])
+    
+    denominator = np.exp(np.sum(logA, axis=1)) + np.exp(np.sum(logB,axis=1)+logC)
+    logDenominator = np.log(denominator)
+    
+    return np.round(np.exp(logNumerator-logDenominator))  
     # *** END CODE HERE ***
 
 
@@ -117,6 +180,11 @@ def get_top_five_naive_bayes_words(model, dictionary):
     Returns: A list of the top five most indicative words in sorted order with the most indicative first
     """
     # *** START CODE HERE ***
+    
+    logRatio = np.log(model["pj_spam"]) - np.log(model["pj_notspam"])
+    dictLogRatios = {key: logRatio[indx] for indx, key in enumerate(dictionary)}
+    
+    return sorted(dictLogRatios, key = lambda k: dictLogRatios[k], reverse = True)[:5]
     # *** END CODE HERE ***
 
 
@@ -137,6 +205,15 @@ def compute_best_svm_radius(train_matrix, train_labels, val_matrix, val_labels, 
         The best radius which maximizes SVM accuracy.
     """
     # *** START CODE HERE ***
+    svm_bestAccuracy= -1; bestRadius = -1
+    for radius in radius_to_consider:
+        svm_prediction = svm.train_and_predict_svm(train_matrix, train_labels, val_matrix, radius)
+        svm_accuracy = np.mean(svm_prediction == val_labels)
+        if svm_accuracy > svm_bestAccuracy:
+            svm_bestAccuracy = svm_accuracy
+            bestRadius = radius
+    
+    return bestRadius
     # *** END CODE HERE ***
 
 

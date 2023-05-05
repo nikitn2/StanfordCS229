@@ -16,6 +16,7 @@ def initial_state():
     """
 
     # *** START CODE HERE ***
+    return []
     # *** END CODE HERE ***
 
 
@@ -33,6 +34,12 @@ def predict(state, kernel, x_i):
         Returns the prediction (i.e 0 or 1)
     """
     # *** START CODE HERE ***
+    var = 0
+    for statelet in state:
+        beta = statelet[0]
+        x_old= statelet[1]
+        var += beta*kernel(x_old, x_i)
+    return sign(var)
     # *** END CODE HERE ***
 
 
@@ -47,6 +54,8 @@ def update_state(state, kernel, learning_rate, x_i, y_i):
         y_i: A 0 or 1 indicating the label for a single instance
     """
     # *** START CODE HERE ***
+    beta_i = y_i - predict(state,kernel, x_i)
+    state += [(beta_i, x_i)]
     # *** END CODE HERE ***
 
 
@@ -68,7 +77,7 @@ def dot_kernel(a, b):
     return np.dot(a, b)
 
 
-def rbf_kernel(a, b, sigma=1):
+def rbf_kernel(a, b, sigma = 1):
     """An implementation of the radial basis function kernel.
 
     Args:
