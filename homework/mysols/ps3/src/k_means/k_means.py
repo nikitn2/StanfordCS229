@@ -26,7 +26,8 @@ def init_centroids(num_clusters, image):
     """
 
     # *** START YOUR CODE ***
-    # raise NotImplementedError('init_centroids function not implemented')
+    centroids_init = np.random.randint(0, 255, size=(num_clusters, image.shape[-1])).astype(np.float64)
+
     # *** END YOUR CODE ***
 
     return centroids_init
@@ -60,6 +61,34 @@ def update_centroids(centroids, image, max_iter=30, print_every=10):
                 # Loop over all centroids and store distances in `dist`
                 # Find closest centroid and update `new_centroids`
         # Update `new_centroids`
+    
+    # Initialise
+    H = image.shape[0]
+    W = image.shape[1]
+    C = image.shape[2]
+    imageFlat = image.reshape((H*W,C))
+    centroids = centroids.astype(np.float64)
+    
+    # Now perform the iterations
+    for it in range(0,max_iter):
+        
+        # Compute distances of each (image-)datapoint to every centroid
+        dists   = ((imageFlat[..., np.newaxis] - centroids.transpose()[np.newaxis, ...] )**2).sum(axis=1)
+        
+        # Get to which centroid each datapoint belongs
+        belonging = np.zeros_like(dists)
+        belonging[ np.arange(H*W), np.argmin(dists, axis=1)] = 1
+        
+        # And update the centroids
+        numerator = belonging.transpose() @ imageFlat
+        denomintr = (belonging).sum(axis=0)[:,np.newaxis]
+        np.true_divide(numerator, denomintr, out=centroids, where=denomintr!=0)
+        
+        XX CONT HERE XX
+        
+        #centroids = (belonging).sum(axis=0)*(belonging.transpose() @ imageFlat)
+    
+    
     # *** END YOUR CODE ***
 
     return new_centroids
