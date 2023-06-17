@@ -55,12 +55,6 @@ def update_centroids(centroids, image, max_iter=30, print_every=10):
     """
 
     # *** START YOUR CODE ***
-    # raise NotImplementedError('update_centroids function not implemented')
-        # Usually expected to converge long before `max_iter` iterations
-                # Initialize `dist` vector to keep track of distance to every centroid
-                # Loop over all centroids and store distances in `dist`
-                # Find closest centroid and update `new_centroids`
-        # Update `new_centroids`
     
     # Initialise
     H = image.shape[0]
@@ -84,11 +78,7 @@ def update_centroids(centroids, image, max_iter=30, print_every=10):
         denomintr = (belonging).sum(axis=0)[:,np.newaxis]
         np.true_divide(numerator, denomintr, out=centroids, where=denomintr!=0)
         
-        XX CONT HERE XX
-        
-        #centroids = (belonging).sum(axis=0)*(belonging.transpose() @ imageFlat)
-    
-    
+    new_centroids = centroids
     # *** END YOUR CODE ***
 
     return new_centroids
@@ -113,10 +103,24 @@ def update_image(image, centroids):
     """
 
     # *** START YOUR CODE ***
-    # raise NotImplementedError('update_image function not implemented')
-            # Initialize `dist` vector to keep track of distance to every centroid
-            # Loop over all centroids and store distances in `dist`
-            # Find closest centroid and update pixel value in `image`
+    
+    # Initialise
+    H = image.shape[0]
+    W = image.shape[1]
+    C = image.shape[2]
+    imageFlat = image.reshape((H*W,C))
+    centroids = centroids.astype(np.float64)
+        
+    # Compute distances of each (image-)datapoint to every centroid
+    dists   = ((imageFlat[..., np.newaxis] - centroids.transpose()[np.newaxis, ...] )**2).sum(axis=1)
+    
+    # Get to which centroid each datapoint belongs
+    belonging = np.zeros_like(dists)
+    belonging[ np.arange(H*W), np.argmin(dists, axis=1)] = 1
+        
+    # Set the new colours of the image
+    image = (belonging @ centroids).reshape((H,W,C)).astype(np.uint8)
+    
     # *** END YOUR CODE ***
 
     return image
