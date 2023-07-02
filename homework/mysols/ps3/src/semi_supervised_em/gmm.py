@@ -7,6 +7,18 @@ K = 4           # Number of Gaussians in the mixture model
 NUM_TRIALS = 3  # Number of trials to run (can be adjusted for debugging)
 UNLABELED = -1  # Cluster label for unlabeled data points (do not change)
 
+def compteMu(x, z, w):
+    
+    numerator   = w @ x
+    denominator = np.sum(w,axis=1)
+    return numerator/denominator[:,np.newaxis]
+
+def computeSigma(x, z, w, mu):
+    
+    x_st = x[:,:,np.newaxis] - mu.T[np.newaxis,:, :]
+    numerator   = np.einsum('ijk,ilk->jlk', x_st, x_st)
+    denominator = np.sum(w,axis=1)
+    return numerator/denominator[np.newaxis, np.newaxis, :]
 
 def main(is_semi_supervised, trial_num):
     """Problem 3: EM for Gaussian Mixture Models (unsupervised and semi-supervised)"""
@@ -17,8 +29,8 @@ def main(is_semi_supervised, trial_num):
     train_path = os.path.join('.', 'train.csv')
     x_all, z_all = load_gmm_dataset(train_path)
 
-    # Split into labeled and unlabeled examples
-    labeled_idxs = (z_all != UNLABELED).squeeze()
+    # # Split into labeled and unlabeled examples
+    labeled_idxs   = (z_all != UNLABELED).squeeze()
     x_tilde = x_all[labeled_idxs, :]   # Labeled examples
     z_tilde = z_all[labeled_idxs, :]   # Corresponding labels
     x = x_all[~labeled_idxs, :]        # Unlabeled examples
@@ -26,22 +38,54 @@ def main(is_semi_supervised, trial_num):
     # *** START CODE HERE ***
     # (1) Initialize mu and sigma by splitting the n_examples data points uniformly at random
     # into K groups, then calculating the sample mean and covariance for each group
+    
+    # Make sure unabelled data is shuffled and set z_tilde to int
+    x = x[np.random.permutation(len(x))]
+    z_tilde = z_tilde.astype(int, copy=False)
+    
+    # Send labeled examples to the back
+    n_unlabelled = len(x)
+    n_labelled   = len(x_tilde)
+    x = np.append(x, x_tilde, axis=0)
+    
+    # Split unabelled examples randomly into K clusters
+    z = np.random.randint(0,K,size=(n_unlabelled,1))
+    z = np.append(z, z_tilde, axis = 0)
+    
+    # Create the w 
+    w       = np.ones((K,n_unlabelled))/K
+    w_tilde = np.zeros((K, n_labelled)); w_tilde[z_tilde[:,0], np.arange(0,n_labelled)] = 1
+    w = np.append(w, w_tilde, axis = 1)
+    
+    # And compute mu
+    mu    = compteMu(x,z, w)
+    
+    # And sigma
+    sigma = computeSigma(x,z,w,mu)
+    
+    
     # (2) Initialize phi to place equal probability on each Gaussian
     # phi should be a numpy array of shape (K,)
+    phi = np.ones(K)/K
+    
     # (3) Initialize the w values to place equal probability on each Gaussian
     # w should be a numpy array of shape (m, K)
+    
+    # Already done.
+    
     # *** END CODE HERE ***
 
     if is_semi_supervised:
-        w = run_semi_supervised_em(x, x_tilde, z_tilde, w, phi, mu, sigma)
+        w = run_semi_supervised_em(x, z, w, phi, mu, sigma)
     else:
-        w = run_em(x, w, phi, mu, sigma)
+        w = run_em(x[:n_unlabelled], w[:,:n_unlabelled], phi, mu, sigma)
 
     # Plot your predictions
-    z_pred = np.zeros(n)
-    if w is not None:  # Just a placeholder for the starter code
-        for i in range(n):
-            z_pred[i] = np.argmax(w[i])
+    # z_pred = np.zeros(n)
+    # if w is not None:  # Just a placeholder for the starter code
+    #     for i in range(n):
+    #         z_pred[i] = np.argmax(w[i])
+    z_pred = w.argmax(axis=0)
 
     plot_gmm_preds(x, z_pred, is_semi_supervised, plot_id=trial_num)
 
