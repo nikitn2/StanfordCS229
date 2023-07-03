@@ -1,24 +1,46 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from scipy.stats import multivariate_normal
 
 PLOT_COLORS = ['red', 'green', 'blue', 'orange']  # Colors for your plots
 K = 4           # Number of Gaussians in the mixture model
 NUM_TRIALS = 3  # Number of trials to run (can be adjusted for debugging)
 UNLABELED = -1  # Cluster label for unlabeled data points (do not change)
+alpha = 20.     # Weight for the labeled examples
 
-def compteMu(x, z, w):
+def computeMu(x, w):
     
     numerator   = w @ x
     denominator = np.sum(w,axis=1)
     return numerator/denominator[:,np.newaxis]
 
-def computeSigma(x, z, w, mu):
+def computeSigma(x, w, mu):
     
-    x_st = x[:,:,np.newaxis] - mu.T[np.newaxis,:, :]
-    numerator   = np.einsum('ijk,ilk->jlk', x_st, x_st)
-    denominator = np.sum(w,axis=1)
-    return numerator/denominator[np.newaxis, np.newaxis, :]
+    x_st        = x[:,np.newaxis,:] - mu[np.newaxis,:, :]
+    numerator   = np.einsum('ji,ijk,ijl->jkl', w, x_st, x_st)
+    denominator = w.sum(axis=1)
+    return numerator/denominator[:, np.newaxis, np.newaxis]
+
+def updateEgetLL(x, mu, sigma, phi):
+    
+    # Initialise
+    n             = x.shape[0]
+    
+    # First get p_xz_given_theta
+    p_xz_given_theta = np.zeros((n,K))
+    for i in range(0,K): p_xz_given_theta[:,i] = multivariate_normal.pdf(x, mu[i,:], sigma[i,...])*phi[i]
+    
+    # Now p_x_given_theta
+    p_x_given_theta = p_xz_given_theta.sum(axis=1)
+    
+    # Now get one of the returns, p_z_given_xTheta
+    p_z_given_xTheta = p_xz_given_theta/p_x_given_theta[:,np.newaxis]
+    
+    # And then for the other, log-likelihood
+    ll = np.log(p_xz_given_theta.sum(axis=1)).sum(axis=0)
+    
+    return p_z_given_xTheta.T, ll
 
 def main(is_semi_supervised, trial_num):
     """Problem 3: EM for Gaussian Mixture Models (unsupervised and semi-supervised)"""
@@ -44,25 +66,29 @@ def main(is_semi_supervised, trial_num):
     z_tilde = z_tilde.astype(int, copy=False)
     
     # Send labeled examples to the back
+    d            = x.shape[1]
     n_unlabelled = len(x)
     n_labelled   = len(x_tilde)
     x = np.append(x, x_tilde, axis=0)
     
-    # Split unabelled examples randomly into K clusters
-    z = np.random.randint(0,K,size=(n_unlabelled,1))
-    z = np.append(z, z_tilde, axis = 0)
-    
     # Create the w 
     w       = np.ones((K,n_unlabelled))/K
-    w_tilde = np.zeros((K, n_labelled)); w_tilde[z_tilde[:,0], np.arange(0,n_labelled)] = 1
-    w = np.append(w, w_tilde, axis = 1)
+    w_tilde = np.zeros((K, n_labelled)); w_tilde[z_tilde[:,0], np.arange(0,n_labelled)] = alpha
+    w       = np.append(w, w_tilde, axis = 1)
     
-    # And compute mu
-    mu    = compteMu(x,z, w)
+    # And randomly initialise z
+    if is_semi_supervised:
+        n = n_unlabelled + n_labelled
+        z = np.random.randint(0, K, n)
+    else: 
+        n = n_unlabelled
+        z = np.random.randint(0, K, n_unlabelled )
     
-    # And sigma
-    sigma = computeSigma(x,z,w,mu)
-    
+    # And compute mu and sigma
+    mu = np.zeros((K,d)); sigma = np.zeros((K,d,d))
+    for i in range(0,K): 
+        mu[i,:] = np.mean(x[:n][z==i], axis = 0)
+        sigma[i,...] = np.cov(x[:n][z==i].T)
     
     # (2) Initialize phi to place equal probability on each Gaussian
     # phi should be a numpy array of shape (K,)
@@ -70,27 +96,21 @@ def main(is_semi_supervised, trial_num):
     
     # (3) Initialize the w values to place equal probability on each Gaussian
     # w should be a numpy array of shape (m, K)
-    
-    # Already done.
+    # ALREADY DONE.
     
     # *** END CODE HERE ***
 
     if is_semi_supervised:
-        w = run_semi_supervised_em(x, z, w, phi, mu, sigma)
+        w = run_em(x, w, phi, mu, sigma, n_unlabelled)
     else:
-        w = run_em(x[:n_unlabelled], w[:,:n_unlabelled], phi, mu, sigma)
-
+        w = run_em(x[:n_unlabelled,...], w[...,:n_unlabelled], phi, mu, sigma, n_unlabelled)
+    
     # Plot your predictions
-    # z_pred = np.zeros(n)
-    # if w is not None:  # Just a placeholder for the starter code
-    #     for i in range(n):
-    #         z_pred[i] = np.argmax(w[i])
     z_pred = w.argmax(axis=0)
-
     plot_gmm_preds(x, z_pred, is_semi_supervised, plot_id=trial_num)
 
 
-def run_em(x, w, phi, mu, sigma):
+def run_em(x, w, phi, mu, sigma, n_unlabelled):
     """Problem 3(d): EM Algorithm (unsupervised).
 
     See inline comments for instructions.
@@ -108,72 +128,31 @@ def run_em(x, w, phi, mu, sigma):
         example x^(i) belonging to the j-th Gaussian in the mixture.
     """
     # No need to change any of these parameters
-    eps = 1e-3  # Convergence threshold
-    max_iter = 1000
+    eps = 1e-4  # Convergence threshold
+    max_iter = 2000
 
     # Stop when the absolute change in log-likelihood is < eps
     # See below for explanation of the convergence criterion
     it = 0
     ll = prev_ll = None
     while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
-        pass  # Just a placeholder for the starter code
+
         # *** START CODE HERE
-        # (1) E-step: Update your estimates in w
+        # (1) E-step: Update your estimates in w (and compute ll while at it)
+        prev_ll = ll
+        w[:,:n_unlabelled], ll = updateEgetLL(x[:n_unlabelled,:], mu, sigma, phi)
+        
         # (2) M-step: Update the model parameters phi, mu, and sigma
-        # (3) Compute the log-likelihood of the data to check for convergence.
-        # By log-likelihood, we mean `ll = sum_x[log(sum_z[p(x|z) * p(z)])]`.
-        # We define convergence by the first iteration where abs(ll - prev_ll) < eps.
-        # Hint: For debugging, recall part (a). We showed that ll should be monotonically increasing.
+        mu    = computeMu(x, w)
+        sigma = computeSigma(x, w, mu)
+        phi   = w.sum(axis=1)/w.sum()
+
+        # Iterate and repeat until convergence
+        print(ll, it)
+        it+=1
         # *** END CODE HERE ***
 
     return w
-
-
-def run_semi_supervised_em(x, x_tilde, z_tilde, w, phi, mu, sigma):
-    """Problem 3(e): Semi-Supervised EM Algorithm.
-
-    See inline comments for instructions.
-
-    Args:
-        x: Design matrix of unlabeled examples of shape (n_examples_unobs, dim).
-        x_tilde: Design matrix of labeled examples of shape (n_examples_obs, dim).
-        z_tilde: Array of labels of shape (n_examples_obs, 1).
-        w: Initial weight matrix of shape (n_examples, k).
-        phi: Initial mixture prior, of shape (k,).
-        mu: Initial cluster means, list of k arrays of shape (dim,).
-        sigma: Initial cluster covariances, list of k arrays of shape (dim, dim).
-
-    Returns:
-        Updated weight matrix of shape (n_examples, k) resulting from semi-supervised EM algorithm.
-        More specifically, w[i, j] should contain the probability of
-        example x^(i) belonging to the j-th Gaussian in the mixture.
-    """
-    # No need to change any of these parameters
-    alpha = 20.  # Weight for the labeled examples
-    eps = 1e-3   # Convergence threshold
-    max_iter = 1000
-
-    # Stop when the absolute change in log-likelihood is < eps
-    # See below for explanation of the convergence criterion
-    it = 0
-    ll = prev_ll = None
-    while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
-        pass  # Just a placeholder for the starter code
-        # *** START CODE HERE ***
-        # (1) E-step: Update your estimates in w
-        # (2) M-step: Update the model parameters phi, mu, and sigma
-        # (3) Compute the log-likelihood of the data to check for convergence.
-        # Hint: Make sure to include alpha in your calculation of ll.
-        # Hint: For debugging, recall part (a). We showed that ll should be monotonically increasing.
-        # *** END CODE HERE ***
-
-    return w
-
-
-# *** START CODE HERE ***
-# Helper functions
-# *** END CODE HERE ***
-
 
 def plot_gmm_preds(x, z, with_supervision, plot_id):
     """Plot GMM predictions on a 2D dataset `x` with labels `z`.
@@ -234,6 +213,7 @@ if __name__ == '__main__':
     # affect the final predictions with and without supervision
     for t in range(NUM_TRIALS):
         main(is_semi_supervised=False, trial_num=t)
+        main(is_semi_supervised=True, trial_num=t)
 
         # *** START CODE HERE ***
         # Once you've implemented the semi-supervised version,

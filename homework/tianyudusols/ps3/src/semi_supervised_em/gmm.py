@@ -109,21 +109,6 @@ def run_em(x, w, phi, mu, sigma):
     # Gaussian distributions for each category
     while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
         it += 1
-        # pass  # Just a placeholder for the starter code
-        # *** START CODE HERE
-        # (1) E-step: Update your estimates in w
-        # Use Bayes Rule.
-        # w[i, j] = p(z=j|xi)
-        # for i in range(n):
-        #     denominator = 0.0
-        #     for j in range(K):
-        #         # p(xi|zi=j) * p(zi=j)
-        #         posterior = gaussian(x[i], mu[j], sigma[j]) * phi[j]
-        #         denominator += posterior
-        #     for j in range(K):
-        #         w[i, j] = gaussian(x[i], mu[j], sigma[j]) * phi[j] / denominator
-        #     # total = np.array(total)
-        #     # w[i, :] = total / total.sum()
         for i in range(n):
             denominator = 0
             for j in range(K):
@@ -144,32 +129,7 @@ def run_em(x, w, phi, mu, sigma):
                 sigma_j += w[i, j] * (temp) @ (temp).T
             mu[j] = mu_j / const
             sigma[j] = sigma_j / const
-        # *** Previous M-Step ***
-        # new_phi = w.sum(axis=0) / n
-        # # new_phi = w.sum(axis=0) / w.sum()
-        # # new_mu = (w.T @ x) / w.sum(axis=0).reshape(-1, 1)  # An vectorized implementation.
-        # new_mu = list()
-        # new_sigma = list()
-        # for j in range(K):
-        #     # mu[j, :] = np.matmul((w[:, 1].reshape(1, -1)), x).reshape(-1) / mu[j, :].sum()
-        #     total_vec = np.zeros(d)
-        #     denominator = 0.0
-        #     for i in range(n):
-        #         total_vec += w[i, j] * x[i]
-        #         denominator += w[i, j]
-        #     new_mu.append(total_vec / denominator)
-        #     sigma_placeholder = np.zeros_like(sigma[j])
-        #     for i in range(n):
-        #         ci = (x[i] - mu[j]).reshape(-1, 1)
-        #         partial = w[i, j] * np.matmul(ci, ci.T)
-        #         sigma_placeholder += partial
-        #     new_sigma.append(sigma_placeholder / (denominator))
-        # # Assign new values
-        # phi[:] = new_phi
-        # for j in range(K):
-        #     mu[j] = new_mu[j]
-        #     sigma[j] = new_sigma[j]
-        # *** End ***
+       
 
         # (3) Compute the log-likelihood of the data to check for convergence.
         # By log-likelihood, we mean `ll = sum_x[log(sum_z[p(x|z) * p(z)])]`.
