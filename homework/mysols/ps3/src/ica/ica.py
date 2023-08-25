@@ -19,10 +19,11 @@ def update_W(W, x, learning_rate):
     """
 
     # *** START CODE HERE ***
+    dl_dw = LA.inv(W).T - np.outer(np.sign(W @ x.T), x.T)
+    updated_W = W + learning_rate*dl_dw
     # *** END CODE HERE ***
 
     return updated_W
-
 
 def unmix(X, W):
     """
@@ -39,6 +40,7 @@ def unmix(X, W):
     S = np.zeros(X.shape)
 
     # *** START CODE HERE ***
+    S = X @ W.T
     # *** END CODE HERE ***
 
     return S
@@ -83,8 +85,8 @@ def main():
 
     for i in range(X.shape[1]):
         save_sound(X[:, i], 'mixed_{}'.format(i))
-
-    W = unmixer(X)
+    
+    W = unmixer( X )
     print(W)
     save_W(W)
     S = normalize(unmix(X, W))
