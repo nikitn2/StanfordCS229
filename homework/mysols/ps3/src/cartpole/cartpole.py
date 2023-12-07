@@ -82,6 +82,7 @@ initial learning quickly, and start the display only after the
 performance is reasonable.
 """
 
+
 def initialize_mdp_data(num_states):
     """
     Return a variable that contains all the parameters/state you need for your MDP.
@@ -104,7 +105,7 @@ def initialize_mdp_data(num_states):
     #Index zero is count of rewards being -1 , index 1 is count of total num state is reached
     reward_counts = np.zeros((num_states, 2)) 
     reward = np.zeros(num_states)
-    value = np.random.rand(num_states) * 0.1
+    value = np.random.rand(num_states)*0.1
 
     return {
         'transition_counts': transition_counts,
@@ -129,6 +130,12 @@ def choose_action(state, mdp_data):
     """
 
     # *** START CODE HERE ***
+    def argmax(iterable): return max(enumerate(iterable), key=lambda x: x[1])[0]
+    value_actions = np.tensordot(mdp_data["transition_probs"], mdp_data["value"], axes = ([1], [0]) )
+    value_action = value_actions[state,:]
+    
+    if np.isclose(value_action[0],value_action[1]): return np.random.randint(2)
+    else: return argmax(value_action)
     # *** END CODE HERE ***
 
 def update_mdp_transition_counts_reward_counts(mdp_data, state, action, new_state, reward):
@@ -153,6 +160,10 @@ def update_mdp_transition_counts_reward_counts(mdp_data, state, action, new_stat
     """
 
     # *** START CODE HERE ***
+    mdp_data["transition_counts"][state][new_state][action] += 1
+    mdp_data["reward_counts"][new_state][reward+1]          += 1
+    
+   # print(state,action,new_state,reward)
     # *** END CODE HERE ***
 
     # This function does not return anything
@@ -176,6 +187,15 @@ def update_mdp_transition_probs_reward(mdp_data):
     """
 
     # *** START CODE HERE ***
+    # Transition probabilities
+    num = mdp_data["transition_counts"].copy()
+    den = mdp_data["transition_counts"].sum(1)[:,np.newaxis,:]
+    mdp_data["transition_probs"] = np.divide(num, den, out = num, where = den != 0)
+    
+    # Rewards
+    num = mdp_data["reward_counts"] @ np.array([-1,0])
+    den = mdp_data["reward_counts"].sum(1)
+    mdp_data["reward"] = np.divide(num, den, out = num, where = den != 0)
     # *** END CODE HERE ***
 
     # This function does not return anything
@@ -203,15 +223,24 @@ def update_mdp_value(mdp_data, tolerance, gamma):
     """
 
     # *** START CODE HERE ***
+    
+    # Update value function
+    value_actions = np.tensordot(mdp_data["transition_probs"], mdp_data["value"], axes = ([1], [0]) )
+    max_value_actions = value_actions.max(axis=1)
+    old_value = mdp_data["value"]; mdp_data["value"] = mdp_data["reward"] + gamma*max_value_actions
+    
+    # Check for convergence
+    return np.abs(old_value- mdp_data["value"]).max()< tolerance
+    
     # *** END CODE HERE ***
 
 def main(plot=True):
     # Seed the randomness of the simulation so this outputs the same thing each time
-    np.random.seed(0)
+    np.random.seed(3)
 
     # Simulation parameters
-    pause_time = 0.0001
-    min_trial_length_to_start_display = 100
+    pause_time = 1e-6
+    min_trial_length_to_start_display = 1e10
     display_started = min_trial_length_to_start_display == 0
 
     NUM_STATES = 163
@@ -242,8 +271,7 @@ def main(plot=True):
     # `state` is the number given to this state, you only need to consider
     # this representation of the state
     state = cart_pole.get_state(state_tuple)
-    # if min_trial_length_to_start_display == 0 or display_started == 1:
-    #     cart_pole.show_cart(state_tuple, pause_time)
+    #if min_trial_length_to_start_display == 0 or display_started == 1: cart_pole.show_cart(state_tuple, pause_time)
 
     mdp_data = initialize_mdp_data(NUM_STATES)
 
@@ -268,8 +296,7 @@ def main(plot=True):
 
         # Get the state number corresponding to new state vector
         new_state = cart_pole.get_state(state_tuple)
-        # if display_started == 1:
-        #     cart_pole.show_cart(state_tuple, pause_time)
+        if display_started == 1: cart_pole.show_cart(state_tuple, pause_time)
 
         # reward function to use - do not change this!
         if new_state == NUM_STATES - 1:
@@ -331,4 +358,4 @@ def main(plot=True):
     return np.array(time_steps_to_failure)
     
 if __name__ == '__main__':
-    main()
+    output = main()
